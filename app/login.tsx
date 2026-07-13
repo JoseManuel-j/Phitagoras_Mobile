@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { getTagihan, getToken, login } from '../lib/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -11,13 +12,12 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isCheckingLogin, setIsCheckingLogin] = useState(true);
 
-  // 1. CEK MEMORI PAS APLIKASI BARU DIBUKA
+  // 1. CEK APAKAH SUDAH ADA TOKEN TERSIMPAN PAS APLIKASI BARU DIBUKA
   useEffect(() => {
     const cekStatusLogin = async () => {
       try {
-        const data = await AsyncStorage.getItem('data_murid');
-        if (data !== null) {
-          // Kalau ada data di memori, langsung tendang ke Beranda!
+        const token = await getToken();
+        if (token) {
           router.replace('/(tabs)/beranda');
         } else {
           setIsCheckingLogin(false);
@@ -29,7 +29,7 @@ export default function LoginScreen() {
     cekStatusLogin();
   }, []);
 
-  // 2. FUNGSI KLIK TOMBOL MASUK
+  // 2. FUNGSI KLIK TOMBOL MASUK -> panggil API Laravel beneran
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Gagal', 'Email dan Password nggak boleh kosong cuk!');
@@ -37,32 +37,37 @@ export default function LoginScreen() {
     }
 
     setIsLoading(true);
+    try {
+      const { user } = await login(email, password);
 
-    // Simulasi nunggu loading dari API Laravel
-    setTimeout(async () => {
+      // Simpen data siswa buat ditampilin di halaman Profil,
+      // dipetain ke nama field yang dipakai profil.tsx
+      let namaProgram = '-';
       try {
-        // Kita bikin data JSON pura-pura dapet dari database dengan struktur BARU
-        const namaDariEmail = email.split('@')[0]; 
-        const dataSiswa = {
-          nama: namaDariEmail,
-          email: email, // Ambil dari inputan
-          wa: "0812-XXXX-XXXX",
-          alamat: "Tangerang Selatan, Banten",
-          program: "Full-Stack Web Dev",
-          foto: null // Nanti buat nyimpen gambar profil
-        };
-
-        // Simpen ke dalam flashdisk HP
-        await AsyncStorage.setItem('data_murid', JSON.stringify(dataSiswa));
-        
-        // Pindah ke Beranda
-        setIsLoading(false);
-        router.replace('/(tabs)/beranda'); 
-      } catch (e) {
-        setIsLoading(false);
-        Alert.alert('Error', 'Gagal nyimpen data ke HP.');
+        const tagihanList = await getTagihan();
+        if (tagihanList.length > 0) namaProgram = tagihanList[0].nama_program;
+      } catch {
+        // gapapa kalau gagal ambil, bukan blocker buat login
       }
-    }, 1500);
+
+      await AsyncStorage.setItem(
+        'data_murid',
+        JSON.stringify({
+          nama: user.name,
+          email: user.email,
+          wa: user.nomor_hp || '-',
+          alamat: user.alamat || '-',
+          program: namaProgram,
+          foto: null,
+        })
+      );
+
+      setIsLoading(false);
+      router.replace('/(tabs)/beranda');
+    } catch (e: any) {
+      setIsLoading(false);
+      Alert.alert('Gagal Login', e.message || 'Email atau password salah.');
+    }
   };
 
   // Layar loading pas lagi ngecek status login awal
@@ -117,8 +122,8 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]} 
+        <TouchableOpacity
+          style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
           onPress={handleLogin}
           disabled={isLoading}
         >

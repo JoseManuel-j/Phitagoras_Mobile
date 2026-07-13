@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import React, { useContext, useEffect, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ThemeContext } from '../../components/ThemeContext';
+import { logout as apiLogout } from '../../lib/api';
 
 export default function ProfilScreen() {
   const { isDarkMode } = useContext(ThemeContext);
@@ -32,8 +33,16 @@ export default function ProfilScreen() {
       { 
         text: 'Keluar', style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.removeItem('data_murid');
-          router.replace('/login');
+          try {
+            await apiLogout(); // Coba ngasih tau backend
+          } catch (error) {
+            console.log('Backend error pas logout, tapi gas terus!');
+          } finally {
+            // FINALLY: Jalanin ini bagaimanapun caranya (sukses/gagal)
+            await AsyncStorage.removeItem('data_murid');
+            await AsyncStorage.removeItem('auth_token'); // Pastiin token juga kehapus
+            router.replace('/login');
+          }
         }
       }
     ]);
