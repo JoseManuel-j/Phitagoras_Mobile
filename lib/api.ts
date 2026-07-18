@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ============================================================
+// 🔧 MODE DUMMY — dipake sementara selama API Laravel belum kelar.
+// Set false lagi kalau API temen lu udah jadi & udah dites lewat Postman.
+// ============================================================
+const USE_MOCK = true;
+
 // ⚠️ GANTI INI sesuai alamat IP komputer kamu yang menjalankan `php artisan serve`.
 // - Kalau test di Expo Go / HP fisik: pakai IP LAN komputer, contoh 'http://192.168.1.5:8000/api'
 //   (cek pakai `ipconfig` di Windows atau `ifconfig`/`ip addr` di Mac/Linux)
@@ -8,6 +14,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const API_BASE_URL = 'http://192.168.1.3:8000/api';
 
 const TOKEN_KEY = 'auth_token';
+
+// Kasih delay dikit biar kerasa kayak nembak jaringan beneran (loading spinner kelihatan)
+const fakeDelay = (ms = 600) => new Promise((res) => setTimeout(res, ms));
 
 export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
@@ -65,34 +74,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   return json;
 }
 
-// ---------------- AUTH ----------------
-
-export async function login(email: string, password: string) {
-  const json = await apiFetch('/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-  if (json?.data?.token) {
-    await setToken(json.data.token);
-  }
-  return json.data; // { token, user }
-}
-
-export async function logout() {
-  try {
-    await apiFetch('/logout', { method: 'POST' });
-  } catch {
-    // biarpun gagal (misal token udah expired), tetep hapus token lokal
-  }
-  await clearToken();
-}
-
-export async function getMe() {
-  const json = await apiFetch('/me');
-  return json.data;
-}
-
-// ---------------- TAGIHAN & ANGSURAN ----------------
+// ---------------- TIPE DATA ----------------
 
 export type RiwayatPembayaran = {
   id: number;
@@ -115,7 +97,103 @@ export type Tagihan = {
   riwayat_pembayaran: RiwayatPembayaran[];
 };
 
+// ---------------- DATA DUMMY ----------------
+
+const MOCK_USER = {
+  id: 1,
+  name: 'Yosua Ranantama',
+  email: 'yosua@example.com',
+  nomor_hp: '081234567890',
+  alamat: 'Tangerang Selatan, Banten',
+};
+
+const MOCK_TAGIHAN: Tagihan[] = [
+  {
+    id: 1,
+    pendaftaran_id: 1,
+    nama_program: 'Kursus Web Programming',
+    tipe_kelas: 'Reguler',
+    jumlah: 2500000,
+    total_dibayar: 1000000,
+    sisa_tagihan: 1500000,
+    jatuh_tempo: '2026-08-15',
+    status: 'cicilan',
+    riwayat_pembayaran: [
+      { id: 1, jumlah_bayar: 1000000, tanggal_bayar: '2026-07-01', metode: 'Transfer Bank', bukti_bayar: null },
+    ],
+  },
+  {
+    id: 2,
+    pendaftaran_id: 1,
+    nama_program: 'Kursus Desain Grafis',
+    tipe_kelas: 'Privat',
+    jumlah: 1800000,
+    total_dibayar: 1800000,
+    sisa_tagihan: 0,
+    jatuh_tempo: '2026-06-01',
+    status: 'lunas',
+    riwayat_pembayaran: [
+      { id: 2, jumlah_bayar: 1800000, tanggal_bayar: '2026-05-20', metode: 'QRIS', bukti_bayar: null },
+    ],
+  },
+];
+
+// ---------------- AUTH ----------------
+
+export async function login(email: string, password: string) {
+  if (USE_MOCK) {
+    await fakeDelay();
+    if (!email || !password) {
+      throw new Error('Email atau password salah.');
+    }
+    const token = 'mock-token-' + Date.now();
+    await setToken(token);
+    return { token, user: MOCK_USER };
+  }
+
+  const json = await apiFetch('/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  if (json?.data?.token) {
+    await setToken(json.data.token);
+  }
+  return json.data; // { token, user }
+}
+
+export async function logout() {
+  if (USE_MOCK) {
+    await fakeDelay(200);
+    await clearToken();
+    return;
+  }
+
+  try {
+    await apiFetch('/logout', { method: 'POST' });
+  } catch {
+    // biarpun gagal (misal token udah expired), tetep hapus token lokal
+  }
+  await clearToken();
+}
+
+export async function getMe() {
+  if (USE_MOCK) {
+    await fakeDelay(200);
+    return MOCK_USER;
+  }
+
+  const json = await apiFetch('/me');
+  return json.data;
+}
+
+// ---------------- TAGIHAN & ANGSURAN ----------------
+
 export async function getTagihan(): Promise<Tagihan[]> {
+  if (USE_MOCK) {
+    await fakeDelay();
+    return MOCK_TAGIHAN;
+  }
+
   const json = await apiFetch('/tagihan');
   return json.data;
 }
@@ -127,6 +205,24 @@ export async function bayarTagihan(
   metode: string,
   imageUri: string
 ) {
+  if (USE_MOCK) {
+    await fakeDelay();
+    const tagihan = MOCK_TAGIHAN.find((t) => t.id === tagihanId);
+    if (tagihan) {
+      tagihan.total_dibayar += jumlahBayar;
+      tagihan.sisa_tagihan = Math.max(0, tagihan.sisa_tagihan - jumlahBayar);
+      tagihan.status = tagihan.sisa_tagihan === 0 ? 'lunas' : 'cicilan';
+      tagihan.riwayat_pembayaran.push({
+        id: Date.now(),
+        jumlah_bayar: jumlahBayar,
+        tanggal_bayar: new Date().toISOString(),
+        metode,
+        bukti_bayar: imageUri,
+      });
+    }
+    return tagihan;
+  }
+
   const filename = imageUri.split('/').pop() || `bukti_${Date.now()}.jpg`;
   const match = /\.(\w+)$/.exec(filename);
   const ext = match ? match[1].toLowerCase() : 'jpg';
