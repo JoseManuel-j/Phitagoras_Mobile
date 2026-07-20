@@ -50,18 +50,6 @@ export default function BerandaScreen() {
         <Text style={[styles.idValue, { color: textColor }]}>{dataMurid.email}</Text>
       </View>
 
-      {/* PENGUMUMAN */}
-      <Text style={[styles.sectionTitle, { color: textColor }]}>Pengumuman Terbaru</Text>
-      <View style={[styles.announcementCard, { backgroundColor: cardColor, borderColor: borderColor, borderWidth: 1 }]}>
-        <View style={styles.announcementHeader}>
-          <Ionicons name="megaphone" size={20} color="#E53E3E" />
-          <Text style={[styles.announcementDate, { color: subTextColor }]}>Hari ini, 09:00 WIB</Text>
-        </View>
-        <Text style={[styles.announcementTitle, { color: textColor }]}>Sesi Konsultasi Project KKP</Text>
-        <Text style={[styles.announcementText, { color: subTextColor }]}>
-          Jangan lupa siapin progress codingan mobile dan web kalian buat bimbingan rutin minggu ini ya cuk.
-        </Text>
-      </View>
 
       <View style={{ height: 40 }} />
     </ScrollView>

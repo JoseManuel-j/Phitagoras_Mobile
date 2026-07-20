@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { getTagihan, getToken, login } from '../lib/api';
+import { ActivityIndicator, Alert, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { forgotPassword, getTagihan, getToken, login, resetPassword, verifyOtp } from '../lib/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -12,7 +12,22 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isCheckingLogin, setIsCheckingLogin] = useState(true);
 
-  // 1. CEK APAKAH SUDAH ADA TOKEN TERSIMPAN PAS APLIKASI BARU DIBUKA
+  // STATE LUPA PASSWORD (MULTI-STEP)
+  const [isForgotModalVisible, setForgotModalVisible] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1: Email, 2: OTP, 3: Password Baru
+  const [resetEmail, setResetEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
+
+  const closeForgotModal = () => {
+    setForgotModalVisible(false);
+    setForgotStep(1);
+    setResetEmail('');
+    setOtpCode('');
+    setNewPassword('');
+  };
+
   useEffect(() => {
     const cekStatusLogin = async () => {
       try {
@@ -29,7 +44,6 @@ export default function LoginScreen() {
     cekStatusLogin();
   }, []);
 
-  // 2. FUNGSI KLIK TOMBOL MASUK -> panggil API Laravel beneran
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Gagal', 'Email dan Password nggak boleh kosong cuk!');
@@ -39,16 +53,11 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       const { user } = await login(email, password);
-
-      // Simpen data siswa buat ditampilin di halaman Profil,
-      // dipetain ke nama field yang dipakai profil.tsx
       let namaProgram = '-';
       try {
         const tagihanList = await getTagihan();
         if (tagihanList.length > 0) namaProgram = tagihanList[0].nama_program;
-      } catch {
-        // gapapa kalau gagal ambil, bukan blocker buat login
-      }
+      } catch {}
 
       await AsyncStorage.setItem(
         'data_murid',
@@ -70,7 +79,18 @@ export default function LoginScreen() {
     }
   };
 
-  // Layar loading pas lagi ngecek status login awal
+  const handleResendOtp = async () => {
+    setIsForgotLoading(true);
+    try {
+      const res = await forgotPassword(resetEmail);
+      setIsForgotLoading(false);
+      Alert.alert('Sukses', res.message || 'Kode OTP baru telah dikirim ke email kamu.');
+    } catch (e: any) {
+      setIsForgotLoading(false);
+      Alert.alert('Gagal', e.message || 'Terjadi kesalahan saat mengirim ulang OTP.');
+    }
+  };
+
   if (isCheckingLogin) {
     return (
       <View style={[styles.container, { alignItems: 'center' }]}>
@@ -83,9 +103,11 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <View style={styles.logoBox}>
-          <Text style={styles.logoText}>Φ</Text>
-        </View>
+        <Image 
+          source={require('../assets/logo/logo-phitagoras.png')}
+          style={{ width: 80, height: 80, marginBottom: 12 }} 
+          resizeMode="contain"
+        />
         <Text style={styles.title}>Phitagoras</Text>
         <Text style={styles.subtitle}>Portal Siswa</Text>
       </View>
@@ -122,6 +144,10 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity style={styles.forgotPasswordContainer} onPress={() => setForgotModalVisible(true)}>
+          <Text style={styles.forgotPasswordText}>Lupa Password?</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
           onPress={handleLogin}
@@ -134,6 +160,163 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* MODAL LUPA PASSWORD MULTI-STEP */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isForgotModalVisible}
+        onRequestClose={closeForgotModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            
+            {/* STEP 1: INPUT EMAIL */}
+            {forgotStep === 1 && (
+              <>
+                <Text style={styles.modalTitle}>Lupa Password</Text>
+                <Text style={styles.modalDesc}>
+                  Masukkan email terdaftar kamu. Kami akan mengirimkan kode OTP untuk mengatur ulang password.
+                </Text>
+
+                <Text style={[styles.labelModal, { color: '#333' }]}>Email Address</Text>
+                <View style={[styles.inputContainerModal, { backgroundColor: '#F5F5F5', borderColor: '#DDD' }]}>
+                  <TextInput
+                    style={[styles.inputModal, { color: '#000' }]}
+                    placeholder="Masukkan email Anda"
+                    placeholderTextColor="#888"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={resetEmail}
+                    onChangeText={setResetEmail}
+                  />
+                </View>
+
+                <TouchableOpacity 
+                  style={[styles.verifyButton, isForgotLoading && { opacity: 0.7 }]}
+                  disabled={isForgotLoading}
+                  onPress={async () => {
+                    if (!resetEmail) {
+                      Alert.alert('Gagal', 'Email nggak boleh kosong cuk!');
+                      return;
+                    }
+                    setIsForgotLoading(true);
+                    try {
+                      const res = await forgotPassword(resetEmail);
+                      setIsForgotLoading(false);
+                      setForgotStep(2);
+                    } catch (e: any) {
+                      setIsForgotLoading(false);
+                      Alert.alert('Gagal', e.message || 'Email tidak terdaftar atau terjadi kesalahan.');
+                    }
+                  }}
+                >
+                  {isForgotLoading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.verifyButtonText}>Kirim Kode OTP</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* STEP 2: INPUT OTP */}
+            {forgotStep === 2 && (
+              <>
+                <Text style={styles.modalTitle}>Verifikasi Kode OTP</Text>
+                <Text style={styles.modalDesc}>
+                  Kami sudah kirim kode OTP 6 digit ke <Text style={{fontWeight: 'bold'}}>{resetEmail}</Text>. Kode berlaku selama 10 menit.
+                </Text>
+
+                <View style={[styles.inputContainerModal, { backgroundColor: '#F5F5F5', borderColor: '#DDD', justifyContent: 'center' }]}>
+                  <TextInput
+                    style={[styles.inputModal, { color: '#000', textAlign: 'center', fontSize: 20, letterSpacing: 5 }]}
+                    placeholder="- - - - - -"
+                    placeholderTextColor="#888"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={otpCode}
+                    onChangeText={setOtpCode}
+                  />
+                </View>
+
+                <TouchableOpacity 
+                  style={[styles.verifyButton, isForgotLoading && { opacity: 0.7 }]}
+                  disabled={isForgotLoading}
+                  onPress={async () => {
+                    if (otpCode.length < 6) {
+                      Alert.alert('Gagal', 'Masukkan 6 digit kode OTP.');
+                      return;
+                    }
+                    setIsForgotLoading(true);
+                    try {
+                      await verifyOtp(resetEmail, otpCode);
+                      setIsForgotLoading(false);
+                      setForgotStep(3);
+                    } catch (e: any) {
+                      setIsForgotLoading(false);
+                      Alert.alert('Gagal', e.message || 'Kode OTP salah atau sudah kadaluarsa.');
+                    }
+                  }}
+                >
+                  {isForgotLoading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.verifyButtonText}>Verifikasi Kode</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={handleResendOtp} style={{marginTop: 15, alignItems: 'center'}} disabled={isForgotLoading}>
+                  <Text style={{color: '#4F8EF7', fontSize: 13, fontWeight: 'bold'}}>Nggak dapat kode? Kirim ulang</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* STEP 3: BIKIN PASSWORD BARU */}
+            {forgotStep === 3 && (
+              <>
+                <Text style={styles.modalTitle}>Buat Password Baru</Text>
+                <Text style={styles.modalDesc}>
+                  Silakan masukkan password baru untuk akun Anda.
+                </Text>
+
+                <Text style={[styles.labelModal, { color: '#333' }]}>Password Baru</Text>
+                <View style={[styles.inputContainerModal, { backgroundColor: '#F5F5F5', borderColor: '#DDD' }]}>
+                  <TextInput
+                    style={[styles.inputModal, { color: '#000' }]}
+                    placeholder="Masukkan password baru"
+                    placeholderTextColor="#888"
+                    secureTextEntry={true}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                  />
+                </View>
+
+                <TouchableOpacity 
+                  style={[styles.verifyButton, isForgotLoading && { opacity: 0.7 }]}
+                  disabled={isForgotLoading}
+                  onPress={async () => {
+                    if (newPassword.length < 6) {
+                      Alert.alert('Gagal', 'Password minimal 6 karakter.');
+                      return;
+                    }
+                    setIsForgotLoading(true);
+                    try {
+                      await resetPassword(resetEmail, otpCode, newPassword);
+                      setIsForgotLoading(false);
+                      Alert.alert('Sukses', 'Password berhasil diubah! Silakan login dengan password baru.');
+                      closeForgotModal();
+                    } catch (e: any) {
+                      setIsForgotLoading(false);
+                      Alert.alert('Gagal', e.message || 'Gagal mereset password.');
+                    }
+                  }}
+                >
+                  {isForgotLoading ? <ActivityIndicator color="#FFF"/> : <Text style={styles.verifyButtonText}>Simpan Password Baru</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity onPress={closeForgotModal} style={styles.cancelButton} disabled={isForgotLoading}>
+              <Text style={styles.cancelButtonText}>Batal</Text>
+            </TouchableOpacity>
+
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -141,8 +324,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#12121A', padding: 20, justifyContent: 'center' },
   logoContainer: { alignItems: 'center', marginBottom: 40 },
-  logoBox: { backgroundColor: '#4F8EF7', width: 60, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  logoText: { color: '#FFF', fontSize: 32, fontWeight: 'bold' },
   title: { color: '#FFF', fontSize: 24, fontWeight: 'bold' },
   subtitle: { color: '#888', fontSize: 14, marginTop: 4 },
   formContainer: { backgroundColor: '#1E1E2D', padding: 24, borderRadius: 20, elevation: 5 },
@@ -155,4 +336,19 @@ const styles = StyleSheet.create({
   loginButton: { backgroundColor: '#4F8EF7', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   loginButtonDisabled: { opacity: 0.7 },
   loginButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  forgotPasswordContainer: { alignItems: 'flex-end', marginBottom: 20, marginTop: -10 },
+  forgotPasswordText: { color: '#4F8EF7', fontSize: 13, fontWeight: 'bold' },
+  
+  // Style khusus Modal agar tidak bentrok dengan form utama
+  labelModal: { fontSize: 13, marginBottom: 8, fontWeight: '500' },
+  inputContainerModal: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, marginBottom: 20, borderWidth: 1 },
+  inputModal: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#FFF', padding: 24, borderRadius: 16, elevation: 10 },
+  modalTitle: { color: '#12121A', fontSize: 22, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
+  modalDesc: { color: '#666', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  verifyButton: { backgroundColor: '#21215C', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+  verifyButtonText: { color: '#FFF', fontSize: 15, fontWeight: 'bold' },
+  cancelButton: { marginTop: 16, alignItems: 'center', paddingVertical: 8 },
+  cancelButtonText: { color: '#888', fontSize: 14, fontWeight: 'bold' },
 });

@@ -9,53 +9,16 @@ import {
 } from 'react-native';
 // INI IMPORT BARUNYA CUK
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getJadwal, type JadwalHari } from '../../lib/api';
 
 const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
 
-// Data dummy — ganti dengan API Laravel nanti
-const DUMMY_JADWAL = [
-  {
-    hari: 'Senin',
-    pelajaran: [
-      { jam: '07.00 - 08.30', mapel: 'Matematika', guru: 'Bp. Andi', ruang: 'R.101', warna: '#3b82f6' },
-      { jam: '08.30 - 10.00', mapel: 'Bahasa Indonesia', guru: 'Bu Sari', ruang: 'R.101', warna: '#8b5cf6' },
-      { jam: '10.15 - 11.45', mapel: 'IPA', guru: 'Bu Dewi', ruang: 'Lab IPA', warna: '#10b981' },
-    ],
-  },
-  {
-    hari: 'Selasa',
-    pelajaran: [
-      { jam: '07.00 - 08.30', mapel: 'Bahasa Inggris', guru: 'Bu Rina', ruang: 'R.102', warna: '#f59e0b' },
-      { jam: '08.30 - 10.00', mapel: 'Sejarah', guru: 'Bp. Budi', ruang: 'R.102', warna: '#ef4444' },
-      { jam: '10.15 - 11.45', mapel: 'Seni Budaya', guru: 'Bu Laras', ruang: 'R.Seni', warna: '#ec4899' },
-    ],
-  },
-  {
-    hari: 'Rabu',
-    pelajaran: [
-      { jam: '07.00 - 08.30', mapel: 'Matematika', guru: 'Bp. Andi', ruang: 'R.101', warna: '#3b82f6' },
-      { jam: '08.30 - 10.00', mapel: 'IPS', guru: 'Bp. Hendra', ruang: 'R.103', warna: '#14b8a6' },
-    ],
-  },
-  {
-    hari: 'Kamis',
-    pelajaran: [
-      { jam: '07.00 - 08.30', mapel: 'Fisika', guru: 'Bp. Yusuf', ruang: 'Lab Fisika', warna: '#6366f1' },
-      { jam: '08.30 - 10.00', mapel: 'Kimia', guru: 'Bu Nana', ruang: 'Lab Kimia', warna: '#84cc16' },
-      { jam: '10.15 - 11.45', mapel: 'Bahasa Inggris', guru: 'Bu Rina', ruang: 'R.102', warna: '#f59e0b' },
-    ],
-  },
-  {
-    hari: 'Jumat',
-    pelajaran: [
-      { jam: '07.00 - 08.00', mapel: 'Penjaskes', guru: 'Bp. Toni', ruang: 'Lapangan', warna: '#f97316' },
-      { jam: '08.00 - 09.30', mapel: 'Agama', guru: 'Bp. Rizal', ruang: 'R.104', warna: '#a78bfa' },
-    ],
-  },
-];
+// Palet warna buat garis kiri tiap kartu jadwal (dipilih bergantian per index,
+// bukan dari API — API cuma nyimpen jam/mapel/ruang, bukan warna UI)
+const WARNA_PALET = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1'];
 
 export default function JadwalScreen() {
-  const [jadwal, setJadwal] = useState(DUMMY_JADWAL);
+  const [jadwal, setJadwal] = useState<JadwalHari[]>([]);
   const [hariAktif, setHariAktif] = useState('Senin');
   const [loading, setLoading] = useState(false);
 
@@ -71,14 +34,11 @@ export default function JadwalScreen() {
   const fetchJadwal = async () => {
     setLoading(true);
     try {
-      // Ganti dengan API Laravel kamu nanti
-      // const response = await fetch('https://phitagoras.site/api/jadwal', {
-      //   headers: { Authorization: `Bearer ${token}` }
-      // });
-      // const data = await response.json();
-      // setJadwal(data);
+      const data = await getJadwal();
+      setJadwal(data);
     } catch (e) {
-      // pakai data dummy
+      // gagal ambil jadwal (misal belum ada kelas aktif) -> biarin kosong
+      setJadwal([]);
     } finally {
       setLoading(false);
     }
@@ -120,25 +80,27 @@ export default function JadwalScreen() {
           <Text style={styles.hariTitle}>{hariAktif}</Text>
 
           {jadwalHariIni && jadwalHariIni.pelajaran.length > 0 ? (
-            jadwalHariIni.pelajaran.map((item, index) => (
-              <View key={index} style={styles.jadwalCard}>
-                {/* Garis warna kiri */}
-                <View style={[styles.colorBar, { backgroundColor: item.warna }]} />
+            jadwalHariIni.pelajaran.map((item, index) => {
+              const warna = WARNA_PALET[index % WARNA_PALET.length];
+              return (
+                <View key={index} style={styles.jadwalCard}>
+                  {/* Garis warna kiri */}
+                  <View style={[styles.colorBar, { backgroundColor: warna }]} />
 
-                <View style={styles.jadwalContent}>
-                  <View style={styles.jadwalHeader}>
-                    <Text style={styles.mapelText}>{item.mapel}</Text>
-                    <View style={[styles.ruangBadge, { backgroundColor: item.warna + '22' }]}>
-                      <Text style={[styles.ruangText, { color: item.warna }]}>📍 {item.ruang}</Text>
+                  <View style={styles.jadwalContent}>
+                    <View style={styles.jadwalHeader}>
+                      <Text style={styles.mapelText}>{item.mapel}</Text>
+                      <View style={[styles.ruangBadge, { backgroundColor: warna + '22' }]}>
+                        <Text style={[styles.ruangText, { color: warna }]}>📍 {item.ruang}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.jamRow}>
+                      <Text style={styles.jamText}>🕐 {item.jam}</Text>
                     </View>
                   </View>
-                  <Text style={styles.guruText}>👤 {item.guru}</Text>
-                  <View style={styles.jamRow}>
-                    <Text style={styles.jamText}>🕐 {item.jam}</Text>
-                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyIcon}>🎉</Text>

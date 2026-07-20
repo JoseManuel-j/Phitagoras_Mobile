@@ -2,16 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ============================================================
 // 🔧 MODE DUMMY — dipake sementara selama API Laravel belum kelar.
-// Set false lagi kalau API temen lu udah jadi & udah dites lewat Postman.
+// Sekarang udah dimatiin karena API Laravel-nya udah jadi & di-deploy.
+// Set balik ke true kalau lagi mau develop UI tanpa nyambung ke server.
 // ============================================================
-const USE_MOCK = true;
+const USE_MOCK = false;
 
-// ⚠️ GANTI INI sesuai alamat IP komputer kamu yang menjalankan `php artisan serve`.
-// - Kalau test di Expo Go / HP fisik: pakai IP LAN komputer, contoh 'http://192.168.1.5:8000/api'
-//   (cek pakai `ipconfig` di Windows atau `ifconfig`/`ip addr` di Mac/Linux)
-// - Kalau test di emulator Android Studio: pakai 'http://10.0.2.2:8000/api'
-// - JANGAN pakai 'localhost' atau '127.0.0.1', itu nunjuk ke HP-nya sendiri, bukan komputer kamu.
-export const API_BASE_URL = 'http://192.168.1.3:8000/api';
+// ⚠️ Web-nya di-deploy ke phitagoras.site, jadi app produksi nembak ke situ.
+// Kalau lagi develop lokal (php artisan serve) dan mau nyoba dari HP/emulator,
+// ganti sementara ke salah satu contoh di bawah lalu balikin lagi pas build final:
+// - Expo Go / HP fisik : 'http://192.168.1.5:8000/api'  (IP LAN komputer kamu)
+// - Emulator Android    : 'http://10.0.2.2:8000/api'
+export const API_BASE_URL = 'https://phitagoras.site/api';
 
 const TOKEN_KEY = 'auth_token';
 
@@ -155,10 +156,25 @@ export async function login(email: string, password: string) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  if (json?.data?.token) {
-    await setToken(json.data.token);
+
+  // ⚠️ FIX: backend Laravel-nya balikin token di LEVEL ATAS (json.token),
+  // BUKAN di json.data.token. Dan json.data isinya cuma object user
+  // {id, nama_lengkap, email, nomor_telepon} — bukan {token, user}.
+  // Sebelumnya token gak pernah kesimpen gara-gara ngecek path yang salah.
+  const token = json?.token;
+  if (token) {
+    await setToken(token);
   }
-  return json.data; // { token, user }
+
+  const user = {
+    id: json?.data?.id,
+    name: json?.data?.nama_lengkap,
+    email: json?.data?.email,
+    nomor_hp: json?.data?.nomor_telepon,
+    alamat: json?.data?.alamat,
+  };
+
+  return { token, user };
 }
 
 export async function logout() {
@@ -183,7 +199,54 @@ export async function getMe() {
   }
 
   const json = await apiFetch('/me');
-  return json.data;
+  // Samain nama field-nya kayak login() (name, nomor_hp) biar konsisten
+  // dipake di seluruh app, walau backend-nya pakai nama_lengkap/nomor_telepon.
+  return {
+    id: json.data.id,
+    name: json.data.nama_lengkap,
+    email: json.data.email,
+    nomor_hp: json.data.nomor_telepon,
+  };
+}
+
+// ---------------- JADWAL ----------------
+
+export type JadwalHari = {
+  hari: string;
+  pelajaran: { jam: string; mapel: string; ruang: string }[];
+};
+
+export async function getJadwal(): Promise<JadwalHari[]> {
+  if (USE_MOCK) {
+    await fakeDelay();
+    return [];
+  }
+
+  // ⚠️ FIX: endpoint-nya /siswa/jadwal, bukan /jadwal (404 kalau tetep /jadwal).
+  // Balikannya juga array FLAT per baris jadwal:
+  // [{hari, jam_mulai, jam_selesai, ruangan, program}, ...]
+  // — bukan udah dikelompokin per hari. Jadi di-grouping manual di sini
+  // biar JadwalScreen (yang expect {hari, pelajaran:[{jam,mapel,ruang}]}) gak perlu diubah.
+  const json = await apiFetch('/siswa/jadwal');
+  const rows: {
+    hari: string;
+    jam_mulai: string;
+    jam_selesai: string;
+    ruangan: string;
+    program: string;
+  }[] = json.data;
+
+  const grouped: Record<string, JadwalHari['pelajaran']> = {};
+  for (const row of rows) {
+    if (!grouped[row.hari]) grouped[row.hari] = [];
+    grouped[row.hari].push({
+      jam: `${row.jam_mulai} - ${row.jam_selesai}`,
+      mapel: row.program,
+      ruang: row.ruangan,
+    });
+  }
+
+  return Object.entries(grouped).map(([hari, pelajaran]) => ({ hari, pelajaran }));
 }
 
 // ---------------- TAGIHAN & ANGSURAN ----------------
@@ -239,4 +302,162 @@ export async function bayarTagihan(
     body: formData,
   });
   return json.data;
+}
+
+// ---------------- REGISTER (belum ada layarnya di mobile, tinggal dipasang) ----------------
+
+export async function register(
+  namaLengkap: string,
+  email: string,
+  nomorTelepon: string,
+  password: string,
+  passwordConfirmation: string
+) {
+  const json = await apiFetch('/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      nama_lengkap: namaLengkap,
+      email,
+      nomor_telepon: nomorTelepon,
+      password,
+      password_confirmation: passwordConfirmation,
+    }),
+  });
+
+  // Backend langsung ngirim token pas register (auto-login), tapi tetep
+  // wajib verifikasi email dulu sebelum bisa /login lagi nantinya.
+  if (json?.token) {
+    await setToken(json.token);
+  }
+
+  return {
+    token: json?.token,
+    message: json?.message,
+    user: {
+      id: json?.data?.id,
+      name: json?.data?.nama_lengkap,
+      email: json?.data?.email,
+      nomor_hp: json?.data?.nomor_telepon,
+    },
+  };
+}
+
+// ---------------- PROFIL (buat ganti tombol "Edit Foto" placeholder jadi form beneran) ----------------
+
+export async function getProfile() {
+  const json = await apiFetch('/profile');
+  return {
+    id: json.data.id,
+    name: json.data.nama_lengkap,
+    email: json.data.email,
+    nomor_hp: json.data.nomor_telepon,
+  };
+}
+
+export async function updateProfile(namaLengkap: string, nomorTelepon: string) {
+  const json = await apiFetch('/profile', {
+    method: 'PUT',
+    body: JSON.stringify({ nama_lengkap: namaLengkap, nomor_telepon: nomorTelepon }),
+  });
+  return {
+    name: json.data.nama_lengkap,
+    nomor_hp: json.data.nomor_telepon,
+  };
+}
+
+export async function gantiPassword(
+  passwordLama: string,
+  passwordBaru: string,
+  passwordBaruConfirmation: string
+) {
+  const json = await apiFetch('/ganti-password', {
+    method: 'PUT',
+    body: JSON.stringify({
+      password_lama: passwordLama,
+      password_baru: passwordBaru,
+      password_baru_confirmation: passwordBaruConfirmation,
+    }),
+  });
+  // Backend nge-revoke semua token pas ganti password berhasil, jadi
+  // token lokal juga wajib dihapus biar user diminta login ulang.
+  await clearToken();
+  return json.message as string;
+}
+
+// ---------------- ABSENSI (rekap kehadiran, bisa dipasang di layar baru/tab profil) ----------------
+
+export type RekapAbsensi = {
+  total_hadir: number;
+  total_izin: number;
+  total_sakit: number;
+  total_alpha: number;
+  detail: { tanggal: string; status: string }[];
+};
+
+export async function getAbsensi(): Promise<RekapAbsensi> {
+  const json = await apiFetch('/siswa/absensi');
+  return json.data;
+}
+
+// ---------------- INFO KURSUS & FOTO KEGIATAN (publik, gak wajib login) ----------------
+
+export type InfoKursus = {
+  nama_tempat: string;
+  alamat: string;
+  nomor_telepon: string;
+  jam_operasional: string;
+  hero_judul: string;
+  hero_deskripsi: string;
+};
+
+export async function getInfoKursus(): Promise<InfoKursus> {
+  const json = await apiFetch('/info-kursus');
+  return json.data;
+}
+
+export type FotoKegiatan = {
+  id: number;
+  judul: string;
+  keterangan: string | null;
+  url: string;
+  urutan: number;
+  aktif: boolean;
+};
+
+export async function getFotoKegiatan(): Promise<FotoKegiatan[]> {
+  const json = await apiFetch('/foto-kegiatan');
+  return json.data;
+}
+
+// ---------------- PROGRAM KURSUS (publik — buat layar "Daftar Program" kalau mau ditambahin) ----------------
+
+export async function getProgramKursus() {
+  const json = await apiFetch('/program-kursus');
+  return json.data;
+}
+
+// ---------------- LUPA PASSWORD ----------------
+
+export async function forgotPassword(email: string) {
+  const json = await apiFetch('/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  return json;
+}
+
+export async function verifyOtp(email: string, otp: string) {
+  const json = await apiFetch('/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+  return json;
+}
+
+export async function resetPassword(email: string, otp: string, password: string) {
+  const json = await apiFetch('/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, token: otp, password, password_confirmation: password }),
+  });
+  return json;
 }
