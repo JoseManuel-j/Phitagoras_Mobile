@@ -18,13 +18,12 @@ export default function ProfilScreen() {
     ambilData();
   }, []);
 
-  // FUNGSI PAS MURID KLIK TOMBOL EDIT FOTO
-  const pilihFoto = () => {
-    Alert.alert(
-      "Ubah Foto Profil", 
-      "Nanti di sini kita pasang library 'expo-image-picker' biar bisa buka Galeri HP atau Kamera asli pas API temen lu udah kelar cuk!",
-      [{ text: "Oke Siap", style: "default" }]
-    );
+  const getImageUrl = (namaFile: string | null) => {
+    if (!namaFile || namaFile === '-') return null;
+    if (namaFile.startsWith('http')) return namaFile;
+    
+    // Sesuaikan folder tempat simpan fotonya
+    return `https://phitagoras.site/uploads/${namaFile}`; 
   };
 
   const handleLogout = async () => {
@@ -34,13 +33,12 @@ export default function ProfilScreen() {
         text: 'Keluar', style: 'destructive',
         onPress: async () => {
           try {
-            await apiLogout(); // Coba ngasih tau backend
+            await apiLogout(); 
           } catch (error) {
             console.log('Backend error pas logout, tapi gas terus!');
           } finally {
-            // FINALLY: Jalanin ini bagaimanapun caranya (sukses/gagal)
             await AsyncStorage.removeItem('data_murid');
-            await AsyncStorage.removeItem('auth_token'); // Pastiin token juga kehapus
+            await AsyncStorage.removeItem('auth_token'); 
             router.replace('/login');
           }
         }
@@ -59,32 +57,38 @@ export default function ProfilScreen() {
         <Text style={[styles.headerTitle, { color: textColor }]}>Profil Siswa</Text>
       </View>
 
-      {/* AVATAR DENGAN TOMBOL EDIT FOTO */}
+      {/* AVATAR HANYA MENAMPILKAN FOTO DARI WEB */}
       <View style={[styles.profileCard, { backgroundColor: cardColor }]}>
         <View style={styles.avatarContainer}>
           <View style={styles.avatarBox}>
-            {dataMurid.foto ? (
-              <Image source={{ uri: dataMurid.foto }} style={styles.avatarImage} />
+            {dataMurid.foto && dataMurid.foto !== '-' ? (
+              <Image 
+                source={{ uri: getImageUrl(dataMurid.foto) as string }} 
+                style={styles.avatarImage} 
+                resizeMode="cover"
+              />
             ) : (
               <Ionicons name="person" size={40} color="#FFF" />
             )}
           </View>
-          {/* Tombol Kamera Kecil */}
-          <TouchableOpacity style={styles.editFotoBtn} onPress={pilihFoto}>
-            <Ionicons name="camera" size={16} color="#FFF" />
-          </TouchableOpacity>
         </View>
         <Text style={[styles.name, { color: textColor }]}>{dataMurid.nama}</Text>
         <Text style={[styles.badge, { color: '#4F8EF7' }]}>Siswa Aktif</Text>
       </View>
 
-      {/* RINCIAN FORM PENDAFTARAN SESUAI PERMINTAAN LU */}
-      <Text style={[styles.sectionTitle, { color: subTextColor }]}>DATA FORM PENDAFTARAN</Text>
+      {/* BAGIAN INFORMASI AKUN (Sesuai Web) */}
+      <Text style={[styles.sectionTitle, { color: subTextColor }]}>INFORMASI AKUN</Text>
       <View style={[styles.dataCard, { backgroundColor: cardColor }]}>
-        <DataRow label="Program Kursus Yang Diikuti" value={dataMurid.program} textColor={textColor} subTextColor={subTextColor} />
-        <DataRow label="Email Siswa" value={dataMurid.email} textColor={textColor} subTextColor={subTextColor} />
-        <DataRow label="No. WhatsApp / Kontak" value={dataMurid.wa} textColor={textColor} subTextColor={subTextColor} />
-        <DataRow label="Alamat Rumah" value={dataMurid.alamat} textColor={textColor} subTextColor={subTextColor} noBorder />
+        <DataRow label="Nama Lengkap" value={dataMurid.nama} textColor={textColor} subTextColor={subTextColor} />
+        <DataRow label="Email Address" value={dataMurid.email} textColor={textColor} subTextColor={subTextColor} />
+        <DataRow label="Program Kursus" value={dataMurid.program} textColor={textColor} subTextColor={subTextColor} noBorder />
+      </View>
+
+      {/* BAGIAN BIODATA PRIBADI (Sesuai Web) */}
+      <Text style={[styles.sectionTitle, { color: subTextColor }]}>BIODATA PRIBADI</Text>
+      <View style={[styles.dataCard, { backgroundColor: cardColor }]}>
+        <DataRow label="Nomor HP" value={dataMurid.wa} textColor={textColor} subTextColor={subTextColor} />
+        <DataRow label="Alamat Lengkap" value={dataMurid.alamat} textColor={textColor} subTextColor={subTextColor} noBorder />
       </View>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -108,13 +112,12 @@ const styles = StyleSheet.create({
   header: { marginTop: 20, marginBottom: 20 },
   headerTitle: { fontSize: 24, fontWeight: 'bold' },
   profileCard: { alignItems: 'center', padding: 24, borderRadius: 16, marginBottom: 24, elevation: 2 },
-  avatarContainer: { position: 'relative', marginBottom: 12 },
+  avatarContainer: { marginBottom: 12 },
   avatarBox: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#4F8EF7', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
-  editFotoBtn: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#2B6CB0', width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#1E1E2D' },
   name: { fontSize: 20, fontWeight: 'bold', marginBottom: 4, textTransform: 'capitalize' },
   badge: { fontSize: 14, fontWeight: '600' },
-  sectionTitle: { fontSize: 11, fontWeight: 'bold', marginBottom: 10, marginLeft: 4, letterSpacing: 1 },
+  sectionTitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 10, marginLeft: 4, letterSpacing: 1 },
   dataCard: { borderRadius: 16, paddingHorizontal: 16, marginBottom: 24, elevation: 1 },
   dataRow: { paddingVertical: 16 },
   borderBottom: { borderBottomWidth: 1, borderBottomColor: 'rgba(150,150,150,0.1)' },

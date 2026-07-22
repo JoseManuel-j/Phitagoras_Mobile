@@ -172,6 +172,7 @@ export async function login(email: string, password: string) {
     email: json?.data?.email,
     nomor_hp: json?.data?.nomor_telepon,
     alamat: json?.data?.alamat,
+    foto: json?.data?.pas_foto,
   };
 
   return { token, user };

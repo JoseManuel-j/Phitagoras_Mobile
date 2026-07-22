@@ -67,7 +67,7 @@ export default function LoginScreen() {
           wa: user.nomor_hp || '-',
           alamat: user.alamat || '-',
           program: namaProgram,
-          foto: null,
+          foto: (user as any).foto_profil,
         })
       );
 
